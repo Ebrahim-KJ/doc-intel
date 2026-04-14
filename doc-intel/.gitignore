@@ -1,0 +1,15 @@
+__pycache__/
+*.py[cod]
+*.pyo
+venv/
+.venv/
+.env
+data/documents/
+data/indices/
+mlruns/
+*.joblib
+*.index
+models/
+.DS_Store
+.idea/
+.vscode/
