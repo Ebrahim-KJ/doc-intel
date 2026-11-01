@@ -4,12 +4,22 @@ from __future__ import annotations
 
 import csv
 import gzip
+import io
 import json
-import os
+import zipfile
 from pathlib import Path
 from typing import Dict, Tuple
 
 DATA_DIR = Path(__file__).resolve().parents[2] / "data" / "beir"
+OFFICIAL_ZIP = "https://public.ukp.informatik.tu-darmstadt.de/thakur/BEIR/datasets/{name}.zip"
+ZIP_MIRROR = "https://github.com/liyongkang123/extended_beir_datasets/releases/download/beir_v1.0/{name}.zip"
+
+
+def _find(folder: Path, stem: str) -> Path:
+    for cand in (folder / stem, folder / f"{stem}.gz", folder / "qrels" / stem):
+        if cand.exists():
+            return cand
+    raise FileNotFoundError(f"{stem} not found in {folder}")
 
 
 def _read_jsonl(path: Path):
@@ -21,37 +31,40 @@ def _read_jsonl(path: Path):
 
 
 def fetch(name: str) -> Path:
-    """Download a BEIR dataset from the Hugging Face hub into data/beir/<name>."""
-    from huggingface_hub import hf_hub_download
+    """Download a BEIR dataset zip (official host first, then a GitHub release mirror)."""
+    import requests
 
-    dest = DATA_DIR / name
-    dest.mkdir(parents=True, exist_ok=True)
-    for fname in ("corpus.jsonl.gz", "queries.jsonl.gz"):
-        if not (dest / fname).exists():
-            p = hf_hub_download(f"BeIR/{name}", fname, repo_type="dataset", local_dir=dest)
-            os.replace(p, dest / fname) if Path(p) != dest / fname else None
-    if not (dest / "test.tsv").exists():
-        p = hf_hub_download(f"BeIR/{name}-qrels", "test.tsv", repo_type="dataset", local_dir=dest)
-        os.replace(p, dest / "test.tsv") if Path(p) != dest / "test.tsv" else None
-    return dest
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    last = None
+    for url in (OFFICIAL_ZIP, ZIP_MIRROR):
+        try:
+            r = requests.get(url.format(name=name), timeout=300)
+            r.raise_for_status()
+            with zipfile.ZipFile(io.BytesIO(r.content)) as z:
+                z.extractall(DATA_DIR)
+            return DATA_DIR / name
+        except Exception as exc:
+            last = exc
+    raise RuntimeError(f"could not download {name}: {last}")
 
 
 def load(name: str) -> Tuple[Dict[str, dict], Dict[str, str], Dict[str, Dict[str, int]]]:
     folder = DATA_DIR / name
     if not folder.exists():
         folder = fetch(name)
-    corpus = {d["_id"]: {"title": d.get("title", ""), "text": d.get("text", "")}
-              for d in _read_jsonl(folder / "corpus.jsonl.gz")}
+    corpus = {str(d["_id"]): {"title": d.get("title", "") or "", "text": d.get("text", "") or ""}
+              for d in _read_jsonl(_find(folder, "corpus.jsonl"))}
     qrels: Dict[str, Dict[str, int]] = {}
-    with open(folder / "test.tsv", encoding="utf-8") as f:
+    with open(_find(folder, "test.tsv"), encoding="utf-8") as f:
         for row in csv.DictReader(f, delimiter="\t"):
-            qrels.setdefault(row["query-id"], {})[row["corpus-id"]] = int(row["score"])
-    queries = {q["_id"]: q["text"] for q in _read_jsonl(folder / "queries.jsonl.gz") if q["_id"] in qrels}
+            qrels.setdefault(str(row["query-id"]), {})[str(row["corpus-id"])] = int(row["score"])
+    queries = {str(q["_id"]): q["text"] for q in _read_jsonl(_find(folder, "queries.jsonl")) if str(q["_id"]) in qrels}
+    qrels = {q: r for q, r in qrels.items() if q in queries}
     return corpus, queries, qrels
 
 
 def as_chunks(corpus: Dict[str, dict], source: str) -> list[dict]:
     """One chunk per document, in the same shape the ingestion pipeline produces."""
-    return [{"text": (d["title"] + ". " + d["text"]).strip(". ") if d["title"] else d["text"],
+    return [{"text": f"{d['title']}. {d['text']}" if d["title"] else d["text"],
              "source": source, "page": 0, "doc_id": doc_id, "chunk_id": doc_id, "chunk_idx": 0}
             for doc_id, d in corpus.items()]

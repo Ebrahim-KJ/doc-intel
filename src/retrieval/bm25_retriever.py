@@ -32,14 +32,14 @@ class BM25Retriever:
 
     def build(self, chunks: List[Dict[str, Any]]) -> None:
         """Tokenise all chunks and fit BM25."""
-        print(f"🔨 Building BM25 index over {len(chunks)} chunks...")
+        print(f"Building BM25 index over {len(chunks)} chunks...")
         tokenised     = [_tokenise(c["text"]) for c in chunks]
         self.bm25     = BM25Okapi(tokenised)
         self.metadata = [
             {k: c[k] for k in ("text", "source", "page", "doc_id", "chunk_id", "chunk_idx")}
             for c in chunks
         ]
-        print(f"✅ BM25 index built: {len(self.metadata)} documents")
+        print(f"BM25 index built: {len(self.metadata)} documents")
 
     def add(self, chunks: List[Dict[str, Any]]) -> None:
         """
@@ -74,7 +74,7 @@ class BM25Retriever:
         joblib.dump(self.bm25, BM25_PATH)
         with open(BM25_META_PATH, "w") as f:
             json.dump(self.metadata, f)
-        print(f"✅ Saved BM25 index → {BM25_PATH}")
+        print(f"Saved BM25 index → {BM25_PATH}")
 
     def load(self) -> bool:
         if not (os.path.exists(BM25_PATH) and os.path.exists(BM25_META_PATH)):
@@ -82,7 +82,7 @@ class BM25Retriever:
         self.bm25 = joblib.load(BM25_PATH)
         with open(BM25_META_PATH) as f:
             self.metadata = json.load(f)
-        print(f"✅ Loaded BM25 index: {len(self.metadata)} documents")
+        print(f"Loaded BM25 index: {len(self.metadata)} documents")
         return True
 
     @property

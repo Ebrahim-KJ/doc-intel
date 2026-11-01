@@ -47,15 +47,14 @@ def _retrieve(query: str) -> tuple[List[Dict], Dict[str, float]]:
     timings["query_expansion_s"] = round(time.time() - t0, 3)
 
     # 2. Retrieve for each query variant, fuse results
-    t0            = time.time()
-    all_dense     = []
-    all_sparse    = []
+    t0 = time.time()
+    ranked_lists = []
     for q in queries:
-        all_dense.extend(store.search(q, top_k=DENSE_TOP_K))
-        all_sparse.extend(bm25.search(q, top_k=SPARSE_TOP_K))
+        ranked_lists.append(store.search(q, top_k=DENSE_TOP_K))
+        ranked_lists.append(bm25.search(q, top_k=SPARSE_TOP_K))
 
-    # Fuse all retrieved candidates
-    merged = reciprocal_rank_fusion([all_dense, all_sparse])
+    # each variant's ranking is fused as its own list
+    merged = reciprocal_rank_fusion(ranked_lists)
     timings["retrieval_s"] = round(time.time() - t0, 3)
 
     # 3. Cross-encoder reranking

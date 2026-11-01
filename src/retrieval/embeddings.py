@@ -16,7 +16,7 @@ BATCH_SIZE = 64
 @lru_cache(maxsize=1)
 def _get_model():
     from sentence_transformers import SentenceTransformer
-    print(f"📦 Loading embedding model: {MODEL_NAME}")
+    print(f"Loading embedding model: {MODEL_NAME}")
     return SentenceTransformer(MODEL_NAME)
 
 

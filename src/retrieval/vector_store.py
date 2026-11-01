@@ -33,7 +33,7 @@ class FAISSVectorStore:
 
     def build(self, chunks: List[Dict[str, Any]]) -> None:
         """Embed all chunks and build the FAISS index."""
-        print(f"🔨 Building FAISS index over {len(chunks)} chunks...")
+        print(f"Building FAISS index over {len(chunks)} chunks...")
         texts      = [c["text"] for c in chunks]
         embeddings = embed_texts(texts)         # (N, dim) float32
 
@@ -47,7 +47,7 @@ class FAISSVectorStore:
             {k: c[k] for k in ("text", "source", "page", "doc_id", "chunk_id", "chunk_idx")}
             for c in chunks
         ]
-        print(f"✅ FAISS index built: {self.index.ntotal} vectors, dim={self.dim}")
+        print(f"FAISS index built: {self.index.ntotal} vectors, dim={self.dim}")
 
     def add(self, chunks: List[Dict[str, Any]]) -> None:
         """Incrementally add new chunks to an existing index."""
@@ -62,7 +62,7 @@ class FAISSVectorStore:
             {k: c[k] for k in ("text", "source", "page", "doc_id", "chunk_id", "chunk_idx")}
             for c in chunks
         ])
-        print(f"✅ Added {len(chunks)} chunks — total: {self.index.ntotal}")
+        print(f"Added {len(chunks)} chunks — total: {self.index.ntotal}")
 
     def search(self, query: str, top_k: int = 20) -> List[Dict[str, Any]]:
         """Return top_k most similar chunks with scores."""
@@ -110,7 +110,7 @@ class FAISSVectorStore:
         faiss.write_index(self.index, INDEX_PATH)
         with open(METADATA_PATH, "w") as f:
             json.dump(self.metadata, f)
-        print(f"✅ Saved FAISS index → {INDEX_PATH}")
+        print(f"Saved FAISS index → {INDEX_PATH}")
 
     def load(self) -> bool:
         """Load persisted index. Returns True if successful."""
@@ -120,7 +120,7 @@ class FAISSVectorStore:
         with open(METADATA_PATH) as f:
             self.metadata = json.load(f)
         self.dim = self.index.d
-        print(f"✅ Loaded FAISS index: {self.index.ntotal} vectors")
+        print(f"Loaded FAISS index: {self.index.ntotal} vectors")
         return True
 
     @property

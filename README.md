@@ -1,179 +1,70 @@
-# 🔍 DocIntel — Document Intelligence & Research Assistant
+# DocIntel
 
-An advanced Retrieval-Augmented Generation (RAG) system that transforms static documents into an interactive research intelligence layer. Upload any PDF or URL, ask questions in natural language, and receive cited, faithful answers — with full explainability at every stage of the pipeline.
+A retrieval-augmented question-answering app for your own documents: upload PDFs or web pages, ask questions, get answers from Claude with citations to the page they came from.
 
-Built with production-grade RAG architecture: hybrid dense/sparse retrieval, cross-encoder reranking, multi-query expansion, conversation memory, citation tracking, evaluation metrics, a FastAPI backend, and a live Streamlit dashboard.
+Most of the answer quality is decided before the LLM sees anything, at retrieval. So the retrieval design here is chosen by measurement: keyword search, embeddings and their fusion are benchmarked on three public datasets with human relevance labels.
 
----
+## Retrieval benchmark
 
-## 🚀 Live Demo
-👉 **[Launch the App](https://your-streamlit-link-here)**
+![nDCG@10 by method](figures/retrieval_ndcg.png)
 
----
+| Dataset | Documents | Test queries | BM25 | Dense | Hybrid (RRF) | Hybrid vs dense, 95% CI |
+|---|---|---|---|---|---|---|
+| SciFact (science claims) | 5,183 | 300 | 0.654 | 0.648 | **0.681** | +0.032 [+0.006, +0.059] |
+| NFCorpus (medical) | 3,633 | 323 | 0.305 | 0.319 | **0.342** | +0.024 [+0.008, +0.040] |
+| FiQA (finance Q&A) | 57,638 | 648 | 0.221 | **0.369** | 0.344 | −0.025 [−0.045, −0.006] |
 
-## 🎯 Why This Is Hard (And Why It Matters)
+nDCG@10 on the [BEIR](https://github.com/beir-cellar/beir) test splits. Dense retrieval uses all-MiniLM-L6-v2; its scores match the published MTEB results for that model (SciFact 0.645, NFCorpus 0.316, FiQA 0.369). Confidence intervals come from a paired bootstrap over queries (10,000 resamples).
 
-Basic RAG — embed documents, retrieve the closest chunks, feed to an LLM — fails in subtle ways: it misses relevant chunks that use different vocabulary (vocabulary mismatch problem), it retrieves chunks that are superficially similar but contextually wrong, and it hallucinates when retrieved context is insufficient.
+**Findings**
 
-DocIntel addresses each failure mode with a specific architectural solution:
+- **Hybrid search is not a free win.** Fusing keyword and embedding results with reciprocal rank fusion helps on SciFact and NFCorpus, where the two methods are about equally good and make different mistakes. On FiQA, where questions and answers rarely share words, keyword search is far weaker and drags the fused ranking down. The right setup depends on the domain and has to be measured on queries from it.
+- **Recall@100 shows the same pattern** (SciFact: hybrid 0.951, dense 0.925; FiQA: hybrid 0.696, dense 0.706). Recall@100 is the ceiling for the reranking stage, which can only reorder what retrieval found.
+- **Latency:** dense search takes 2 to 5 ms per query. The in-memory BM25 library scales poorly (196 ms per query on FiQA's 57,000 documents); a production deployment would use an inverted index.
 
-| Problem | Solution |
-|---|---|
-| Vocabulary mismatch | BM25 sparse retrieval alongside dense embeddings |
-| Poor ranking | Cross-encoder reranking on the merged candidate set |
-| Single-query brittleness | Multi-query expansion (3 LLM-generated variants) |
-| Hallucination | Faithfulness scoring + citation grounding |
-| No memory | Sliding window conversation buffer |
-| Black-box retrieval | Per-stage latency tracking + evaluation suite |
+Reranking with the cross-encoder is implemented but not yet benchmarked: `python benchmarks/retrieval_benchmark.py scifact nfcorpus fiqa --rerank`.
 
----
+## How it works
 
-## 📁 Project Structure
+1. **Ingest:** PDFs (PyMuPDF), URLs (BeautifulSoup) or text, split into overlapping chunks that keep their source and page number.
+2. **Index:** each chunk goes into FAISS (embedding vectors, cosine similarity) and BM25 (keyword statistics).
+3. **Expand:** Claude rewrites the question into three variants.
+4. **Retrieve and fuse:** every variant queries both indexes; reciprocal rank fusion merges the ranked lists.
+5. **Rerank:** a cross-encoder (ms-marco-MiniLM-L-6-v2) rescores the top 40 and keeps 5.
+6. **Answer:** the 5 chunks and recent conversation go to Claude, which answers with numbered citations.
 
-```
-doc-intel/
-├── src/
-│   ├── ingestion/
-│   │   ├── document_loader.py      # PDF, URL, plain text loading
-│   │   ├── chunking.py             # Semantic + fixed-size chunking strategies
-│   │   └── pipeline.py             # Full ingestion orchestration
-│   ├── retrieval/
-│   │   ├── embeddings.py           # Sentence-transformer embedding model
-│   │   ├── vector_store.py         # FAISS index — build, save, load, search
-│   │   ├── bm25_retriever.py       # BM25 sparse keyword retrieval
-│   │   ├── hybrid_retriever.py     # RRF fusion of dense + sparse results
-│   │   └── reranker.py             # Cross-encoder reranking (ms-marco)
-│   ├── generation/
-│   │   ├── llm_client.py           # Anthropic Claude API client (streaming)
-│   │   ├── prompt_templates.py     # System prompts + context assembly
-│   │   ├── multi_query.py          # LLM-based query expansion
-│   │   └── rag_pipeline.py         # End-to-end RAG orchestration
-│   ├── memory/
-│   │   └── conversation.py         # Sliding window conversation buffer
-│   ├── evaluation/
-│   │   └── evaluator.py            # Faithfulness, relevance, context precision
-│   └── api/
-│       └── main.py                 # FastAPI: /ingest /query /evaluate /health
-├── app/
-│   └── streamlit_app.py            # Live interactive dashboard
-├── data/
-│   ├── documents/                  # Uploaded source documents
-│   └── indices/                    # Persisted FAISS + BM25 indices
-├── notebooks/
-│   └── 01_rag_exploration.ipynb
-├── Dockerfile
-├── docker-compose.yml
-├── requirements.txt
-├── .env.example
-└── README.md
-```
+Answer quality is tracked with LLM-judged faithfulness, answer relevance and context precision (`src/evaluation/evaluator.py`). Failed judge calls are recorded as missing, never as a default score.
 
----
+## Run it
 
-## ⚙️ Setup
-
-### 1. Clone & configure environment
 ```bash
-git clone https://github.com/YOUR_USERNAME/doc-intel.git
-cd doc-intel
-cp .env.example .env
-# Add your Anthropic API key to .env
-```
-
-### 2. Install dependencies
-```bash
-python -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
+cp .env.example .env            # add ANTHROPIC_API_KEY
+
+uvicorn src.api.main:app --port 8000      # API: /ingest /query /evaluate /health
+streamlit run app/streamlit_app.py        # chat interface
+# or: docker-compose up --build
 ```
 
-### 3. Run with Docker (recommended)
+Benchmark (no API key needed):
+
 ```bash
-docker-compose up --build
-# API: http://localhost:8000
-# Dashboard: http://localhost:8501
+pytest                                                    # 5 tests
+python benchmarks/retrieval_benchmark.py scifact nfcorpus fiqa
+python benchmarks/plot_results.py
 ```
 
-### 4. Or run locally
-```bash
-# Terminal 1 — API
-uvicorn src.api.main:app --reload --port 8000
+Datasets download automatically on first use. Set `EMBEDDING_MODEL` or `RERANKER_MODEL` to a local path to use a downloaded copy of either model.
 
-# Terminal 2 — Dashboard
-streamlit run app/streamlit_app.py
 ```
-
----
-
-## 🏃 Usage
-
-### Ingest a document
-```bash
-curl -X POST http://localhost:8000/ingest \
-  -F "file=@paper.pdf"
-
-# Or by URL
-curl -X POST http://localhost:8000/ingest \
-  -H "Content-Type: application/json" \
-  -d '{"url": "https://arxiv.org/abs/2307.09288"}'
+src/
+  ingestion/     loaders, fixed and sentence-aware chunking
+  retrieval/     embeddings, FAISS store, BM25, reciprocal rank fusion, cross-encoder
+  generation/    Claude client, prompts, multi-query expansion, pipeline
+  memory/        sliding-window conversation history
+  evaluation/    LLM-judged answer metrics; BEIR loader and ranking metrics
+  api/           FastAPI service
+app/             Streamlit interface
+benchmarks/      retrieval benchmark and chart
+results/         benchmark outputs (per-query scores included)
 ```
-
-### Query
-```bash
-curl -X POST http://localhost:8000/query \
-  -H "Content-Type: application/json" \
-  -d '{"query": "What are the main findings?", "session_id": "abc123"}'
-```
-
-### Evaluate the RAG pipeline
-```bash
-python src/evaluation/evaluator.py
-```
-
-### View MLflow dashboard
-```bash
-mlflow ui  # → http://localhost:5000
-```
-
----
-
-## 🧠 Technical Architecture
-
-### Ingestion
-Documents are loaded (PDF via PyMuPDF, URLs via BeautifulSoup), split using a semantic chunker that respects sentence boundaries, and indexed in two parallel stores: FAISS for dense vector search and BM25 for sparse keyword matching.
-
-### Hybrid Retrieval
-Each query is first expanded into 3 variants by the LLM, then all variants query both FAISS (top-20) and BM25 (top-20). Results are merged using **Reciprocal Rank Fusion (RRF)** — a rank aggregation method that rewards chunks appearing in the top positions of multiple lists — producing a merged candidate set of 40.
-
-### Cross-Encoder Reranking
-The merged 40 candidates are scored by a **cross-encoder** (ms-marco-MiniLM-L-6-v2) that jointly encodes the query and each chunk — far more accurate than the approximate cosine similarity used during retrieval. Only the top 5 chunks are forwarded to generation.
-
-### Generation
-The top-5 chunks, conversation history (sliding window), and system prompt are assembled into a structured prompt and sent to **Claude** via the Anthropic API with streaming enabled. Each chunk carries its source document and page number, which are extracted into inline citations in the response.
-
-### Evaluation
-Three metrics are computed automatically on each response:
-- **Faithfulness**: does the answer stay within the retrieved context (no hallucination)?
-- **Answer relevance**: does the answer address the actual question?
-- **Context precision**: were the retrieved chunks actually useful?
-
-All metrics and latencies are logged to MLflow.
-
----
-
-## 📦 Docker
-```bash
-docker-compose up --build
-```
-
-Services:
-- `api` — FastAPI backend on port 8000
-- `app` — Streamlit dashboard on port 8501
-- Shared volume for `data/` (documents + indices)
-
----
-
-## 👤 Author
-
-**Ebrahim Kashif Jahangiri**
-MSc Data Science for Public Policy — Cornell University | MEng — Imperial College London
-📧 Ebrahim.KJahangiri@Gmail.com

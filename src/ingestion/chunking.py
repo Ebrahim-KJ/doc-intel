@@ -17,9 +17,7 @@ CHUNK_SIZE    = int(os.getenv("CHUNK_SIZE", 512))
 CHUNK_OVERLAP = int(os.getenv("CHUNK_OVERLAP", 64))
 
 
-# ─────────────────────────────────────────────
 # FIXED-SIZE CHUNKER
-# ─────────────────────────────────────────────
 
 def chunk_fixed(pages: List[Dict[str, Any]],
                 chunk_size: int = CHUNK_SIZE,
@@ -47,14 +45,12 @@ def chunk_fixed(pages: List[Dict[str, Any]],
                 idx += 1
             start += chunk_size - overlap
 
-    print(f"✅ Fixed chunker: {len(pages)} pages → {len(chunks)} chunks "
+    print(f"Fixed chunker: {len(pages)} pages → {len(chunks)} chunks "
           f"(size={chunk_size}, overlap={overlap})")
     return chunks
 
 
-# ─────────────────────────────────────────────
 # SEMANTIC CHUNKER
-# ─────────────────────────────────────────────
 
 def _split_sentences(text: str) -> List[str]:
     """Split text into sentences using punctuation heuristics."""
@@ -142,7 +138,7 @@ def chunk_semantic(pages: List[Dict[str, Any]],
                 })
 
     mode = "semantic+similarity" if use_similarity else "semantic(no-sim)"
-    print(f"✅ Semantic chunker [{mode}]: {len(pages)} pages → {len(chunks)} chunks")
+    print(f"Semantic chunker [{mode}]: {len(pages)} pages → {len(chunks)} chunks")
     return chunks
 
 

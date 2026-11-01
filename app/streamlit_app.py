@@ -26,7 +26,7 @@ API_BASE = os.getenv("API_BASE", "http://localhost:8000")
 
 st.set_page_config(
     page_title="DocIntel — Document Intelligence",
-    page_icon="🔍",
+    page_icon="",
     layout="wide",
 )
 
@@ -93,7 +93,7 @@ def api_documents():
 
 # ── Header ────────────────────────────────────────────────────
 
-st.title("🔍 DocIntel — Document Intelligence & Research Assistant")
+st.title("DocIntel — Document Intelligence & Research Assistant")
 st.markdown(
     "Upload documents, ask questions, get cited answers. "
     "Powered by **Hybrid RAG** (FAISS + BM25 + Cross-encoder reranking) and **Claude**."
@@ -102,25 +102,25 @@ st.markdown(
 # ── Sidebar ───────────────────────────────────────────────────
 
 with st.sidebar:
-    st.header("📂 Document Ingestion")
+    st.header("Document Ingestion")
 
     # Health check
     health = api_health()
     if health:
-        st.success(f"✅ API connected — {health['faiss_vectors']} chunks indexed")
+        st.success(f"API connected — {health['faiss_vectors']} chunks indexed")
     else:
-        st.error("❌ API offline. Start with: `uvicorn src.api.main:app --reload`")
+        st.error("API offline. Start with: `uvicorn src.api.main:app --reload`")
 
     st.markdown("---")
 
     # URL ingestion
     st.subheader("Ingest a URL")
     url_input = st.text_input("Paste a URL (article, paper, Wikipedia...)")
-    if st.button("📥 Ingest URL", disabled=not url_input):
+    if st.button("Ingest URL", disabled=not url_input):
         with st.spinner("Ingesting..."):
             try:
                 result = api_ingest_url(url_input)
-                st.success(f"✅ Ingested {result.get('chunks', '?')} chunks")
+                st.success(f"Ingested {result.get('chunks', '?')} chunks")
             except Exception as e:
                 st.error(f"Error: {e}")
 
@@ -129,18 +129,18 @@ with st.sidebar:
     # PDF upload
     st.subheader("Upload a PDF")
     uploaded = st.file_uploader("Choose a PDF", type="pdf")
-    if uploaded and st.button("📥 Ingest PDF"):
+    if uploaded and st.button("Ingest PDF"):
         with st.spinner("Ingesting..."):
             try:
                 result = api_ingest_file(uploaded.read(), uploaded.name)
-                st.success(f"✅ {uploaded.name} ingested")
+                st.success(f"{uploaded.name} ingested")
             except Exception as e:
                 st.error(f"Error: {e}")
 
     st.markdown("---")
 
     # Indexed documents
-    st.subheader("📚 Indexed Documents")
+    st.subheader("Indexed Documents")
     try:
         docs = api_documents()
         for doc in docs.get("documents", [])[:10]:
@@ -153,7 +153,7 @@ with st.sidebar:
 
     # Session
     st.caption(f"Session: `{st.session_state.session_id}`")
-    if st.button("🗑️ Clear conversation"):
+    if st.button("Clear conversation"):
         st.session_state.messages  = []
         st.session_state.last_result = None
         st.rerun()
@@ -163,7 +163,7 @@ with st.sidebar:
 col_chat, col_meta = st.columns([2, 1])
 
 with col_chat:
-    st.subheader("💬 Research Chat")
+    st.subheader("Research Chat")
 
     # Display conversation history
     for msg in st.session_state.messages:
@@ -181,7 +181,7 @@ with col_chat:
 
         # Generate answer
         with st.chat_message("assistant"):
-            with st.spinner("🔍 Retrieving and generating..."):
+            with st.spinner("Retrieving and generating..."):
                 try:
                     result = api_query(user_input, st.session_state.session_id)
                     answer = result.get("answer", "No answer returned.")
@@ -191,7 +191,7 @@ with col_chat:
                     # Citations
                     citations = result.get("citations", [])
                     if citations:
-                        with st.expander(f"📚 {len(citations)} source(s) cited", expanded=False):
+                        with st.expander(f"{len(citations)} source(s) cited", expanded=False):
                             for c in citations:
                                 st.markdown(f"**{c['source']}** — Page {c['page']}")
                                 st.caption(c['preview'])
@@ -208,7 +208,7 @@ with col_chat:
 # ── Right column: Pipeline metadata ───────────────────────────
 
 with col_meta:
-    st.subheader("🔬 Pipeline Diagnostics")
+    st.subheader("Pipeline Diagnostics")
 
     result = st.session_state.last_result
     if result is None:
@@ -217,7 +217,7 @@ with col_meta:
         # Latency breakdown
         timings = result.get("timings", {})
         if timings:
-            st.markdown("**⏱️ Stage Latencies**")
+            st.markdown("**Stage Latencies**")
             stage_labels = {
                 "query_expansion_s": "Query expansion",
                 "retrieval_s":       "Hybrid retrieval",
@@ -236,7 +236,7 @@ with col_meta:
         # Retrieved chunks
         chunks = result.get("chunks", [])
         if chunks:
-            st.markdown(f"**📄 Retrieved Chunks ({len(chunks)})**")
+            st.markdown(f"**Retrieved Chunks ({len(chunks)})**")
             for i, chunk in enumerate(chunks[:5], 1):
                 score = chunk.get("rerank_score", chunk.get("rrf_score", 0))
                 with st.expander(f"Chunk {i} — {chunk['source']} p.{chunk['page']} (score: {score:.3f})"):
@@ -245,7 +245,7 @@ with col_meta:
         st.divider()
 
         # Evaluation scores (on demand)
-        st.markdown("**📊 Evaluate This Response**")
+        st.markdown("**Evaluate This Response**")
         if st.button("Run evaluation metrics"):
             answer = result.get("answer", "")
             with st.spinner("Scoring faithfulness, relevance, precision..."):
@@ -258,7 +258,7 @@ with col_meta:
                         "Mean Score":        scores.get("mean_score", 0),
                     }
                     for name, score in metrics.items():
-                        color = "🟢" if score >= 0.7 else ("🟡" if score >= 0.4 else "🔴")
+                        color = "" if score >= 0.7 else ("" if score >= 0.4 else "")
                         st.metric(name, f"{score:.2f}", delta=color)
                 except Exception as e:
                     st.error(f"Evaluation error: {e}")

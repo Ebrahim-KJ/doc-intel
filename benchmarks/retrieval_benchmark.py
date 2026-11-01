@@ -3,7 +3,8 @@
 Runs on BEIR datasets with human relevance labels, so every number is
 measured against ground truth rather than an LLM's opinion.
 
-    python benchmarks/retrieval_benchmark.py scifact fiqa
+    python benchmarks/retrieval_benchmark.py scifact nfcorpus fiqa
+    python benchmarks/retrieval_benchmark.py scifact --rerank
 """
 
 import json
@@ -42,7 +43,7 @@ def rerank_all(queries, candidates, depth):
     return out
 
 
-def run(name: str) -> dict:
+def run(name: str, with_rerank: bool = False) -> dict:
     corpus, queries, qrels = beir.load(name)
     chunks = beir.as_chunks(corpus, name)
     qids = list(queries)
@@ -68,15 +69,17 @@ def run(name: str) -> dict:
     hybrid = [reciprocal_rank_fusion([d, s]) for d, s in zip(dense, sparse)]
     timing["Hybrid (RRF)"] = timing["BM25"] + timing["Dense"]
 
-    t = time.perf_counter()
-    hybrid_rr = rerank_all(qtext, hybrid, RERANK_DEPTH)
-    timing["Hybrid + rerank"] = timing["Hybrid (RRF)"] + (time.perf_counter() - t) / len(qids)
-    t = time.perf_counter()
-    dense_rr = rerank_all(qtext, dense, RERANK_DEPTH)
-    timing["Dense + rerank"] = timing["Dense"] + (time.perf_counter() - t) / len(qids)
+    stages = [("BM25", sparse), ("Dense", dense), ("Hybrid (RRF)", hybrid)]
+    if with_rerank:
+        t = time.perf_counter()
+        hybrid_rr = rerank_all(qtext, hybrid, RERANK_DEPTH)
+        timing["Hybrid + rerank"] = timing["Hybrid (RRF)"] + (time.perf_counter() - t) / len(qids)
+        t = time.perf_counter()
+        dense_rr = rerank_all(qtext, dense, RERANK_DEPTH)
+        timing["Dense + rerank"] = timing["Dense"] + (time.perf_counter() - t) / len(qids)
+        stages += [("Dense + rerank", dense_rr), ("Hybrid + rerank", hybrid_rr)]
 
-    for label, hits in [("BM25", sparse), ("Dense", dense), ("Hybrid (RRF)", hybrid),
-                        ("Dense + rerank", dense_rr), ("Hybrid + rerank", hybrid_rr)]:
+    for label, hits in stages:
         runs[label] = {q: ids(h) for q, h in zip(qids, hits)}
 
     scores = {label: per_query(r, qrels) for label, r in runs.items()}
@@ -87,9 +90,10 @@ def run(name: str) -> dict:
         "Dense vs BM25": paired_bootstrap(scores["Dense"][m], scores["BM25"][m]),
         "Hybrid vs Dense": paired_bootstrap(scores["Hybrid (RRF)"][m], scores["Dense"][m]),
         "Hybrid vs BM25": paired_bootstrap(scores["Hybrid (RRF)"][m], scores["BM25"][m]),
-        "Hybrid+rerank vs Hybrid": paired_bootstrap(scores["Hybrid + rerank"][m], scores["Hybrid (RRF)"][m]),
-        "Hybrid+rerank vs Dense+rerank": paired_bootstrap(scores["Hybrid + rerank"][m], scores["Dense + rerank"][m]),
     }
+    if with_rerank:
+        comparisons["Hybrid+rerank vs Hybrid"] = paired_bootstrap(scores["Hybrid + rerank"][m], scores["Hybrid (RRF)"][m])
+        comparisons["Hybrid+rerank vs Dense+rerank"] = paired_bootstrap(scores["Hybrid + rerank"][m], scores["Dense + rerank"][m])
     res = {"dataset": name, "documents": len(chunks), "queries": len(qids), "index_build_s": index_s,
            "table": table, "comparisons": comparisons,
            "per_query_ndcg10": {label: s[m].tolist() for label, s in scores.items()}}
@@ -99,8 +103,9 @@ def run(name: str) -> dict:
 
 
 if __name__ == "__main__":
-    for ds in sys.argv[1:] or ["scifact"]:
-        r = run(ds)
+    args = [a for a in sys.argv[1:] if not a.startswith("--")]
+    for ds in args or ["scifact"]:
+        r = run(ds, with_rerank="--rerank" in sys.argv)
         for label, row in r["table"].items():
             print(f"  {label:<18} nDCG@10 {row['ndcg@10']:.3f}  R@100 {row['recall@100']:.3f}  "
                   f"{row['ms_per_query']:.1f} ms/query")

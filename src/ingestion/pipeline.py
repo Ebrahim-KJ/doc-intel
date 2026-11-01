@@ -23,7 +23,7 @@ def ingest(source: str, strategy: str = CHUNK_STRATEGY) -> Dict[str, Any]:
     Returns ingestion stats.
     """
     t0 = time.time()
-    print(f"\n📥 Ingesting: {source}")
+    print(f"\nIngesting: {source}")
 
     pages  = load_document(source)
     chunks = chunk_documents(pages, strategy=strategy)
@@ -45,7 +45,7 @@ def ingest(source: str, strategy: str = CHUNK_STRATEGY) -> Dict[str, Any]:
         "strategy": strategy,
         "elapsed_s": elapsed,
     }
-    print(f"✅ Ingested in {elapsed}s — {len(chunks)} chunks indexed")
+    print(f"Ingested in {elapsed}s — {len(chunks)} chunks indexed")
     return stats
 
 

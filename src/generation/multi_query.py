@@ -45,7 +45,7 @@ def expand_query(query: str, n: int = N_VARIANTS) -> List[str]:
         text     = message.content[0].text.strip()
         variants = [line.strip() for line in text.split("\n") if line.strip()][:n]
     except Exception as e:
-        print(f"⚠️  Query expansion failed ({e}), using original query only")
+        print(f" Query expansion failed ({e}), using original query only")
         variants = []
 
     all_queries = [query] + variants

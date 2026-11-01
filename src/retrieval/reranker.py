@@ -23,7 +23,7 @@ RERANK_TOP_K   = int(os.getenv("RERANK_TOP_K", 5))
 @lru_cache(maxsize=1)
 def _get_reranker():
     from sentence_transformers.cross_encoder import CrossEncoder
-    print(f"📦 Loading cross-encoder reranker: {RERANKER_MODEL}")
+    print(f"Loading cross-encoder reranker: {RERANKER_MODEL}")
     return CrossEncoder(RERANKER_MODEL)
 
 

@@ -51,7 +51,7 @@ def load_pdf(path: str) -> List[Dict[str, Any]]:
                 "doc_id": doc_id,
             })
 
-    print(f"✅ Loaded PDF: {os.path.basename(path)} — {len(pages)} pages")
+    print(f"Loaded PDF: {os.path.basename(path)} — {len(pages)} pages")
     return pages
 
 
@@ -71,7 +71,7 @@ def load_url(url: str, timeout: int = 15) -> List[Dict[str, Any]]:
     text = soup.get_text(separator="\n", strip=True)
     text = "\n".join(line for line in text.splitlines() if len(line.strip()) > 20)
 
-    print(f"✅ Loaded URL: {url[:60]}... — {len(text)} chars")
+    print(f"Loaded URL: {url[:60]}... — {len(text)} chars")
     return [{"text": text, "source": url, "page": 1, "doc_id": doc_id}]
 
 

@@ -31,9 +31,7 @@ from src.retrieval.embeddings     import embed_texts
 log = logging.getLogger(__name__)
 
 
-# ─────────────────────────────────────────────
 # 1. FAITHFULNESS
-# ─────────────────────────────────────────────
 
 FAITHFULNESS_PROMPT = """You are evaluating whether an AI-generated answer is faithful to its source context.
 
@@ -74,9 +72,7 @@ def score_faithfulness(answer: str, context_chunks: List[Dict]) -> float:
     return round(sum(b == "true" for b in bools) / len(bools), 3)
 
 
-# ─────────────────────────────────────────────
 # 2. ANSWER RELEVANCE
-# ─────────────────────────────────────────────
 
 RELEVANCE_PROMPT = """Given the following answer, generate {n} questions that this answer could be responding to.
 
@@ -119,9 +115,7 @@ def score_answer_relevance(query: str, answer: str, n_questions: int = 3) -> flo
     return round(float(np.mean(sims)), 3)
 
 
-# ─────────────────────────────────────────────
 # 3. CONTEXT PRECISION
-# ─────────────────────────────────────────────
 
 PRECISION_PROMPT = """Does the following text contain information that is directly relevant to answering the query?
 
@@ -156,9 +150,7 @@ def score_context_precision(query: str, chunks: List[Dict]) -> float:
     return round(sum(verdicts) / len(verdicts), 3)
 
 
-# ─────────────────────────────────────────────
 # MASTER EVALUATION RUN
-# ─────────────────────────────────────────────
 
 def evaluate(
     query:    str,
@@ -167,7 +159,7 @@ def evaluate(
     log_mlflow: bool = True,
 ) -> Dict[str, float]:
     """Run all three metrics and return a scores dict."""
-    print("\n📊 Running RAG evaluation...")
+    print("\nRunning RAG evaluation...")
 
     faithfulness     = score_faithfulness(answer, chunks)
     answer_relevance = score_answer_relevance(query, answer)
