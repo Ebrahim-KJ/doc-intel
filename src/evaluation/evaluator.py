@@ -18,6 +18,7 @@ RAG evaluation suite — three metrics:
 All scores are logged to MLflow.
 """
 
+import logging
 import os
 import re
 import numpy as np
@@ -26,6 +27,8 @@ from typing import List, Dict, Any
 
 from src.generation.llm_client   import complete
 from src.retrieval.embeddings     import embed_texts
+
+log = logging.getLogger(__name__)
 
 
 # ─────────────────────────────────────────────
@@ -61,15 +64,14 @@ def score_faithfulness(answer: str, context_chunks: List[Dict]) -> float:
                 FAITHFULNESS_PROMPT.format(context=context[:3000], answer=answer)}],
             temperature=0.0
         )
-        # Parse the JSON boolean list
         bools = re.findall(r'(true|false)', response.lower())
-        if not bools:
-            return 0.5
-        score = sum(b == "true" for b in bools) / len(bools)
-    except Exception:
-        score = 0.5
-
-    return round(score, 3)
+    except Exception as exc:
+        log.warning("faithfulness check failed: %s", exc)
+        return float("nan")
+    if not bools:
+        log.warning("faithfulness check returned no verdicts")
+        return float("nan")
+    return round(sum(b == "true" for b in bools) / len(bools), 3)
 
 
 # ─────────────────────────────────────────────
@@ -96,11 +98,12 @@ def score_answer_relevance(query: str, answer: str, n_questions: int = 3) -> flo
             temperature=0.3
         )
         questions = [q.strip() for q in response.strip().split("\n") if q.strip()][:n_questions]
-    except Exception:
-        return 0.5
+    except Exception as exc:
+        log.warning("answer relevance check failed: %s", exc)
+        return float("nan")
 
     if not questions:
-        return 0.5
+        return float("nan")
 
     all_texts   = [query] + questions
     embeddings  = embed_texts(all_texts)
@@ -136,7 +139,7 @@ def score_context_precision(query: str, chunks: List[Dict]) -> float:
     if not chunks:
         return 0.0
 
-    relevant = 0
+    verdicts = []
     for chunk in chunks:
         try:
             response = complete(
@@ -144,12 +147,13 @@ def score_context_precision(query: str, chunks: List[Dict]) -> float:
                     PRECISION_PROMPT.format(query=query, text=chunk["text"][:500])}],
                 temperature=0.0
             )
-            if "yes" in response.lower()[:10]:
-                relevant += 1
-        except Exception:
-            relevant += 1   # Assume relevant on error
+            verdicts.append(response.strip().lower().startswith("yes"))
+        except Exception as exc:
+            log.warning("context precision check failed for one chunk: %s", exc)
 
-    return round(relevant / len(chunks), 3)
+    if not verdicts:
+        return float("nan")
+    return round(sum(verdicts) / len(verdicts), 3)
 
 
 # ─────────────────────────────────────────────
@@ -173,7 +177,7 @@ def evaluate(
         "faithfulness":      faithfulness,
         "answer_relevance":  answer_relevance,
         "context_precision": context_precision,
-        "mean_score":        round(np.mean([faithfulness, answer_relevance, context_precision]), 3),
+        "mean_score":        round(float(np.nanmean([faithfulness, answer_relevance, context_precision])), 3),
     }
 
     print(f"  Faithfulness:      {faithfulness:.3f}")

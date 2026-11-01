@@ -84,6 +84,26 @@ class FAISSVectorStore:
 
         return results
 
+    def search_many(self, queries: List[str], top_k: int = 20) -> List[List[Dict[str, Any]]]:
+        """Batched version of search: one embedding pass for all queries."""
+        if self.index is None or self.index.ntotal == 0:
+            return [[] for _ in queries]
+        q = embed_texts(queries)
+        faiss.normalize_L2(q)
+        scores, indices = self.index.search(q, min(top_k, self.index.ntotal))
+        out = []
+        for srow, irow in zip(scores, indices):
+            hits = []
+            for score, idx in zip(srow, irow):
+                if idx == -1:
+                    continue
+                chunk = dict(self.metadata[idx])
+                chunk["score"] = float(score)
+                chunk["retrieval_mode"] = "dense"
+                hits.append(chunk)
+            out.append(hits)
+        return out
+
     def save(self) -> None:
         """Persist index and metadata to disk."""
         os.makedirs(INDEX_DIR, exist_ok=True)
